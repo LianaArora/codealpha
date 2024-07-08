@@ -1,0 +1,71 @@
+# Import necessary libraries
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+from sklearn.model_selection import train_test_split, GridSearchCV, cross_val_score
+from sklearn.preprocessing import StandardScaler, OneHotEncoder
+from sklearn.compose import ColumnTransformer
+from sklearn.pipeline import Pipeline
+from sklearn.impute import SimpleImputer
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.metrics import accuracy_score, classification_report, roc_auc_score
+
+# Load data
+data = pd.read_csv('financial_data.csv')
+
+# Data Preprocessing
+# Handle missing values
+imputer = SimpleImputer(strategy='mean')
+data_imputed = pd.DataFrame(imputer.fit_transform(data), columns=data.columns)
+
+# Feature Engineering (example: creating debt-to-income ratio)
+data_imputed['debt_to_income_ratio'] = data_imputed['debt'] / data_imputed['income']
+
+# Split data into features and target variable
+X = data_imputed.drop('creditworthiness', axis=1)
+y = data_imputed['creditworthiness']
+
+# Train-test split
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+# Define preprocessing for numeric and categorical features
+numeric_features = ['income', 'loan_amount', 'debt_to_income_ratio']
+numeric_transformer = Pipeline(steps=[
+    ('scaler', StandardScaler())])
+
+# Assume 'employment_status' is a categorical feature
+categorical_features = ['employment_status']
+categorical_transformer = Pipeline(steps=[
+    ('onehot', OneHotEncoder(handle_unknown='ignore'))])
+
+# Preprocessor
+preprocessor = ColumnTransformer(
+    transformers=[
+        ('num', numeric_transformer, numeric_features),
+        ('cat', categorical_transformer, categorical_features)])
+
+# Define the model
+model = RandomForestClassifier(random_state=42)
+
+# Create and evaluate a pipeline
+clf = Pipeline(steps=[('preprocessor', preprocessor),
+                      ('classifier', model)])
+
+# Hyperparameter tuning
+param_grid = {
+    'classifier__n_estimators': [100, 200],
+    'classifier__max_depth': [None, 10, 20],
+}
+grid_search = GridSearchCV(clf, param_grid, cv=5, scoring='roc_auc')
+grid_search.fit(X_train, y_train)
+
+# Evaluate the best model
+best_model = grid_search.best_estimator_
+y_pred = best_model.predict(X_test)
+y_prob = best_model.predict_proba(X_test)[:, 1]
+
+# Metrics
+print(f'Accuracy: {accuracy_score(y_test, y_pred)}')
+print(classification_report(y_test, y_pred))
+print(f'ROC AUC: {roc_auc_score(y_test, y_prob)}')
